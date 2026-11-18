@@ -136,6 +136,7 @@ button{font-family:inherit;cursor:pointer}
 }
 .cutBtn:active{transform:translateY(3px);box-shadow:0 3px 0 #b93a1a,0 6px 12px rgba(214,86,40,.28)}
 .cutBtn[disabled]{opacity:.5}
+.tip{margin:9px 2px 0;font-size:11px;font-weight:700;line-height:1.45;color:#a0765c;letter-spacing:-.03em;text-align:center}
 /* ---------- reveal ---------- */
 .rv{margin-top:9px;border-radius:18px;padding:11px 12px 12px;border:2px solid #ffd7b6;background:#fffdf9;
   box-shadow:0 8px 20px rgba(196,124,74,.16);animation:rvIn .3s ease-out both}
@@ -331,6 +332,7 @@ button{font-family:inherit;cursor:pointer}
         <input id="fine" type="range" min="5" max="95" step="0.5" value="45" aria-label="가위 선 미세 조정">
       </div>
       <button id="cutBtn" class="cutBtn" type="button">✂️ 싹둑 자르기!</button>
+      <p class="tip">💡 자르기 전에는 조각 무게가 비밀이에요. 총 무게만 보고 눈대중으로!</p>
     </div>
 
     <div class="rv" id="rv" hidden>
@@ -405,7 +407,7 @@ button{font-family:inherit;cursor:pointer}
       f: function (x) { return (0.40 + 1.02 * (1 - x)) * (1 + 0.13 * Math.sin(2 * Math.PI * 1.5 * x + 0.6)); } },
     { name: '오른쪽 두꺼운 고기',
       f: function (x) { return (0.40 + 1.02 * x) * (1 + 0.12 * Math.sin(2 * Math.PI * 1.25 * x + 1.9)); } },
-    { name: '가운데 볼록한 고기',
+    { name: '가운데 얇은 고기',
       f: function (x) { return (0.52 + 0.98 * Math.abs(Math.cos(Math.PI * x))) * (1 + 0.10 * Math.sin(2 * Math.PI * 2 * x + 0.4)); } }
   ];
 
@@ -819,7 +821,7 @@ button{font-family:inherit;cursor:pointer}
 
   function renderOrder() {
     var spec = S.spec;
-    $('orderKind').textContent = S.levelDef.name + ' · ' + KINDS[spec.kind].name;
+    $('orderKind').textContent = S.levelDef.id + '단계 · ' + KINDS[spec.kind].name;
     $('orderText').innerHTML = orderText(spec);
     $('bubble').textContent = bubbleText(spec);
   }
