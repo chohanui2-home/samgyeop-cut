@@ -784,11 +784,11 @@ button{font-family:inherit;cursor:pointer}
      belly fat. Every band edge gets its own gentle wobble. */
   var BOUNDS = [
     { f: 0.000, w: null },
-    { f: 0.072, w: wob(0.010, 19, 0.7) },
-    { f: 0.300, w: wob(0.055, 9, 1.4, 0.014, 27, 0.3) },
-    { f: 0.512, w: wob(0.030, 12, 2.6, 0.010, 24, 1.9) },
-    { f: 0.622, w: wob(0.020, 15, 3.4, 0.008, 29, 0.8) },
-    { f: 0.898, w: wob(0.038, 11, 0.9, 0.010, 26, 2.5) },
+    { f: 0.078, w: wob(0.010, 19, 0.7) },
+    { f: 0.290, w: wob(0.050, 9, 1.4, 0.013, 27, 0.3) },
+    { f: 0.520, w: wob(0.028, 12, 2.6, 0.009, 24, 1.9) },
+    { f: 0.600, w: wob(0.018, 15, 3.4, 0.007, 29, 0.8) },
+    { f: 0.855, w: wob(0.034, 11, 0.9, 0.009, 26, 2.5) },
     { f: 1.000, w: null }
   ];
   var BANDS = [
@@ -840,7 +840,7 @@ button{font-family:inherit;cursor:pointer}
       out.push('<path d="' + ptsPath(depthPts(spec, a, b, BOUNDS[i].f - 0.016, BOUNDS[i].w, 28)) +
         '" fill="none" stroke="#c98255" stroke-width="2.2" opacity=".15" stroke-linecap="round"/>');
       out.push('<path d="' + ptsPath(depthPts(spec, a, b, BOUNDS[i].f + 0.013, BOUNDS[i].w, 28)) +
-        '" fill="none" stroke="#fffdf4" stroke-width="1.4" opacity=".28" stroke-linecap="round"/>');
+        '" fill="none" stroke="#fffdf4" stroke-width="1" opacity=".18" stroke-linecap="round"/>');
     }
     /* the round belly of each lean band: light above, shade below */
     for (k = 0; k < LEANB.length; k++) {
@@ -879,9 +879,9 @@ button{font-family:inherit;cursor:pointer}
     }
     /* wet specular streaks and a sheen along the top of the lean */
     out.push('<path d="' + ptsPath(depthPts(spec, a, b, 0.135, wob(0.006, 21, 0.4), 24)) +
-      '" fill="none" stroke="#ffffff" stroke-width="2.4" opacity=".3" stroke-linecap="round"/>');
+      '" fill="none" stroke="#ffffff" stroke-width="2" opacity=".22" stroke-linecap="round"/>');
     out.push('<path d="' + ptsPath(depthPts(spec, a, b, 0.205, wob(0.005, 26, 2.1), 24)) +
-      '" fill="none" stroke="#fffdf7" stroke-width="1.6" opacity=".22" stroke-linecap="round"/>');
+      '" fill="none" stroke="#fffdf7" stroke-width="1.2" opacity=".16" stroke-linecap="round"/>');
     out.push('<path d="' + ptsPath(depthPts(spec, a, b, BOUNDS[2].f + 0.016, BOUNDS[2].w, 24)) +
       '" fill="none" stroke="#ff9c8e" stroke-width="1.4" opacity=".16" stroke-linecap="round"/>');
     /* knife marks scored into the lean */
@@ -901,7 +901,7 @@ button{font-family:inherit;cursor:pointer}
     /* the rind, laid on last so it stays a clean band */
     out.push('<path d="' + bandAt(spec, a, b, 0, 1) + '" fill="url(#rindG)"/>');
     out.push('<path d="' + ptsPath(depthPts(spec, a, b, BOUNDS[1].f, BOUNDS[1].w, 28)) +
-      '" fill="none" stroke="#fdf0d9" stroke-width="1.6" opacity=".45" stroke-linecap="round"/>');
+      '" fill="none" stroke="#fbe8c9" stroke-width="1.2" opacity=".3" stroke-linecap="round"/>');
     out.push('<path d="' + ptsPath(depthPts(spec, a, b, 0, null, 30)) +
       '" fill="none" stroke="#6d3f16" stroke-width="2.4" opacity=".5" stroke-linecap="round"/>');
     if (cutL) { out.push(cutFace(spec, a, -1, 3.2)); }
@@ -937,8 +937,8 @@ button{font-family:inherit;cursor:pointer}
     out.push('<svg viewBox="0 0 ' + VB_W + ' ' + VB_H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="통삼겹살 도마 위 고기">');
     out.push('<defs>');
     out.push('<linearGradient id="woodG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e5aa6d"/><stop offset="0.45" stop-color="#cf8c50"/><stop offset="1" stop-color="#b4733c"/></linearGradient>');
-    out.push('<linearGradient id="meatG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d5585b"/><stop offset="0.22" stop-color="#c8464c"/><stop offset="0.6" stop-color="#bd3d45"/><stop offset="0.86" stop-color="#b2343c"/><stop offset="1" stop-color="#9f2b34"/></linearGradient>');
-    out.push('<linearGradient id="rindG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dca65e"/><stop offset="0.5" stop-color="#c0873e"/><stop offset="1" stop-color="#a16d2c"/></linearGradient>');
+    out.push('<linearGradient id="meatG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d2464a"/><stop offset="0.22" stop-color="#c73a42"/><stop offset="0.62" stop-color="#bd323b"/><stop offset="0.88" stop-color="#b02c35"/><stop offset="1" stop-color="#98232c"/></linearGradient>');
+    out.push('<linearGradient id="rindG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c78c43"/><stop offset="0.5" stop-color="#a9702b"/><stop offset="1" stop-color="#8d5a1f"/></linearGradient>');
     out.push('<linearGradient id="fatG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdf3e0"/><stop offset="0.4" stop-color="#f9e7c8"/><stop offset="0.8" stop-color="#f2d8b2"/><stop offset="1" stop-color="#e9c99e"/></linearGradient>');
     out.push('<linearGradient id="fatBandG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fcf0da"/><stop offset="0.45" stop-color="#f4dfbd"/><stop offset="1" stop-color="#e5c69c"/></linearGradient>');
     out.push('<linearGradient id="fatEdgeG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6ddbd"/><stop offset="0.6" stop-color="#e9c79b"/><stop offset="1" stop-color="#d9ae7e"/></linearGradient>');
