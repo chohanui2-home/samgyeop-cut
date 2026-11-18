@@ -377,7 +377,7 @@ button{font-family:inherit;cursor:pointer}
   var MIN_GAP = 5;            /* % of the slab length kept between two scissors lines */
   var TOTAL_MIN = 300, TOTAL_MAX = 600;
   var VB_W = 360, VB_H = 212;
-  var MEAT_X0 = 26, MEAT_X1 = 334, MEAT_CY = 104, MEAT_H = 92;
+  var MEAT_X0 = 26, MEAT_X1 = 334, MEAT_CY = 100, MEAT_H = 104;
   var CUM_N = 400;
   var DMAX = 1.7;
 
@@ -690,16 +690,37 @@ button{font-family:inherit;cursor:pointer}
 
   /* ---------- drawing ---------- */
   function mx(f) { return MEAT_X0 + f * (MEAT_X1 - MEAT_X0); }
-  function halfH(spec, x) { return MEAT_H * dens(spec, x) / DMAX / 2; }
+
+  /* A strip of meat is not a rectangle: the ends are trimmed and the middle
+     bulges a little. This envelope is drawing-only - the weight maths keeps
+     using dens() alone. */
+  function shapeEnv(x) {
+    var t = 0.035, e = 1;
+    if (x < t) { e = 0.62 + 0.38 * Math.sin((x / t) * Math.PI / 2); }
+    else if (x > 1 - t) { e = 0.62 + 0.38 * Math.sin(((1 - x) / t) * Math.PI / 2); }
+    return e * (1 + 0.025 * Math.sin(Math.PI * x) + 0.018 * Math.sin(2 * Math.PI * 2.6 * x + 1.1));
+  }
+
+  function halfH(spec, x) { return MEAT_H * dens(spec, x) * shapeEnv(clamp(x, 0, 1)) / (DMAX * 1.07) / 2; }
+  function topY(spec, x) { return MEAT_CY - halfH(spec, x); }
+  function botY(spec, x) { return MEAT_CY + halfH(spec, x); }
+  /* the block's near side: the thickness seen under the cut face */
+  function sideH(spec, x) { return 2.2 + halfH(spec, x) * 0.26; }
+
+  function wob(amp, freq, ph, amp2, freq2, ph2) {
+    return function (x) {
+      var v = amp * Math.sin(x * freq + ph);
+      if (amp2) { v += amp2 * Math.sin(x * freq2 + ph2); }
+      return v;
+    };
+  }
 
   function slabPath(spec, a, b) {
-    var N = 24, i, x, t, bY, top = [], bot = [], d;
+    var N = 30, i, x, d, top = [], bot = [];
     for (i = 0; i <= N; i++) {
       x = a + (b - a) * i / N;
-      t = MEAT_CY - halfH(spec, x);
-      bY = MEAT_CY + halfH(spec, x);
-      top.push([mx(x), t]);
-      bot.push([mx(x), bY]);
+      top.push([mx(x), topY(spec, x)]);
+      bot.push([mx(x), botY(spec, x)]);
     }
     d = 'M' + top[0][0].toFixed(1) + ' ' + top[0][1].toFixed(1);
     for (i = 1; i < top.length; i++) { d += ' L' + top[i][0].toFixed(1) + ' ' + top[i][1].toFixed(1); }
@@ -707,38 +728,200 @@ button{font-family:inherit;cursor:pointer}
     return d + ' Z';
   }
 
-  function edgeLine(spec, a, b, side, offset) {
-    var N = 24, i, x, y, d = '';
+  function sidePath(spec, a, b) {
+    var N = 30, i, x, d, top = [], bot = [];
     for (i = 0; i <= N; i++) {
       x = a + (b - a) * i / N;
-      y = MEAT_CY + side * halfH(spec, x) + offset;
-      d += (i ? ' L' : 'M') + mx(x).toFixed(1) + ' ' + y.toFixed(1);
+      top.push([mx(x), botY(spec, x) - 0.8]);
+      bot.push([mx(x), botY(spec, x) + sideH(spec, x)]);
     }
-    return d;
+    d = 'M' + top[0][0].toFixed(1) + ' ' + top[0][1].toFixed(1);
+    for (i = 1; i < top.length; i++) { d += ' L' + top[i][0].toFixed(1) + ' ' + top[i][1].toFixed(1); }
+    for (i = bot.length - 1; i >= 0; i--) { d += ' L' + bot[i][0].toFixed(1) + ' ' + bot[i][1].toFixed(1); }
+    return d + ' Z';
   }
 
-  function surfaceDetail(spec, a, b) {
-    var out = [], i, k, x, t, bo, y, line, span = b - a;
-    for (k = 0; k < 4; k++) {
-      line = '';
-      for (i = 0; i <= 18; i++) {
-        x = a + span * i / 18;
-        t = MEAT_CY - halfH(spec, x);
-        bo = MEAT_CY + halfH(spec, x);
-        y = t + (bo - t) * (0.18 + 0.19 * k) + Math.sin(x * 22 + k * 1.7) * 2.6;
-        line += (i ? ' L' : 'M') + mx(x).toFixed(1) + ' ' + y.toFixed(1);
+  /* A depth line across the slab: f = 0 is the top edge (the rind), f = 1 the
+     bottom edge. Each boundary of the stack has its own wobble, so the fat and
+     the meat run in organic curves instead of parallel stripes. */
+  function depthY(spec, x, f) {
+    var t = topY(spec, x), bo = botY(spec, x);
+    return t + (bo - t) * f;
+  }
+  function depthPts(spec, a, b, f, w, N) {
+    var pts = [], i, x, d;
+    N = N || 30;
+    for (i = 0; i <= N; i++) {
+      x = a + (b - a) * i / N;
+      d = f + (w ? w(x) : 0);
+      if (d < 0.004) { d = 0.004; } else if (d > 0.996) { d = 0.996; }
+      pts.push([mx(x), depthY(spec, x, d)]);
+    }
+    return pts;
+  }
+  function ptsPath(pts) {
+    var d = 'M' + pts[0][0].toFixed(1) + ' ' + pts[0][1].toFixed(1), i;
+    for (i = 1; i < pts.length; i++) { d += ' L' + pts[i][0].toFixed(1) + ' ' + pts[i][1].toFixed(1); }
+    return d;
+  }
+  function bandAt(spec, a, b, i0, i1) {
+    var top = depthPts(spec, a, b, BOUNDS[i0].f, BOUNDS[i0].w);
+    var bot = depthPts(spec, a, b, BOUNDS[i1].f, BOUNDS[i1].w);
+    var d = ptsPath(top), i;
+    for (i = bot.length - 1; i >= 0; i--) { d += ' L' + bot[i][0].toFixed(1) + ' ' + bot[i][1].toFixed(1); }
+    return d + ' Z';
+  }
+  function bandPath(spec, a, b, f0, f1, w0, w1) {
+    var top = depthPts(spec, a, b, f0, w0);
+    var bot = depthPts(spec, a, b, f1, w1 || w0);
+    var d = ptsPath(top), i;
+    for (i = bot.length - 1; i >= 0; i--) { d += ' L' + bot[i][0].toFixed(1) + ' ' + bot[i][1].toFixed(1); }
+    return d + ' Z';
+  }
+
+  /* The three fat layers of a pork belly (삼겹 = three fats) with the lean
+     between them, from the rind down: rind · back fat · lean · fat seam · lean ·
+     belly fat. Every band edge gets its own gentle wobble. */
+  var BOUNDS = [
+    { f: 0.000, w: null },
+    { f: 0.072, w: wob(0.010, 19, 0.7) },
+    { f: 0.300, w: wob(0.055, 9, 1.4, 0.014, 27, 0.3) },
+    { f: 0.512, w: wob(0.030, 12, 2.6, 0.010, 24, 1.9) },
+    { f: 0.622, w: wob(0.020, 15, 3.4, 0.008, 29, 0.8) },
+    { f: 0.898, w: wob(0.038, 11, 0.9, 0.010, 26, 2.5) },
+    { f: 1.000, w: null }
+  ];
+  var BANDS = [
+    { i0: 0, i1: 1, fill: 'url(#rindG)' },
+    { i0: 1, i1: 2, fill: 'url(#fatG)' },
+    { i0: 3, i1: 4, fill: 'url(#fatBandG)' },
+    { i0: 5, i1: 6, fill: 'url(#fatEdgeG)' }
+  ];
+  var LEANB = [[2, 3], [4, 5]];
+
+  /* a cut end: pale meat with the same fat layers running across it */
+  function cutFace(spec, x, dir, w) {
+    var t = topY(spec, x), bo = botY(spec, x), sh = sideH(spec, x);
+    var xa = mx(x), xb = xa - dir * w, out = [], i, y0, y1;
+    out.push('<path d="M' + xa.toFixed(1) + ' ' + t.toFixed(1) + ' L' + xb.toFixed(1) + ' ' + (t + 2).toFixed(1) +
+      ' L' + xb.toFixed(1) + ' ' + (bo + sh).toFixed(1) + ' L' + xa.toFixed(1) + ' ' + (bo + sh).toFixed(1) +
+      ' Z" fill="url(#cutG)"/>');
+    for (i = 0; i < BANDS.length; i++) {
+      y0 = t + (bo - t) * BOUNDS[BANDS[i].i0].f;
+      y1 = t + (bo - t) * BOUNDS[BANDS[i].i1].f;
+      out.push('<path d="M' + xa.toFixed(1) + ' ' + y0.toFixed(1) + ' L' + xb.toFixed(1) + ' ' + (y0 + 1.5).toFixed(1) +
+        ' L' + xb.toFixed(1) + ' ' + (y1 + 1.5).toFixed(1) + ' L' + xa.toFixed(1) + ' ' + y1.toFixed(1) +
+        ' Z" fill="' + (i === 0 ? '#c9903f' : '#fbeedd') + '" opacity="' + (i === 0 ? '.4' : '.5') + '"/>');
+    }
+    out.push('<path d="M' + xa.toFixed(1) + ' ' + (bo + sh * 0.4).toFixed(1) + ' L' + xb.toFixed(1) + ' ' +
+      (bo + sh * 0.4 + 1.3).toFixed(1) + ' L' + xb.toFixed(1) + ' ' + (bo + sh).toFixed(1) + ' L' + xa.toFixed(1) +
+      ' ' + (bo + sh).toFixed(1) + ' Z" fill="#b07c47" opacity=".55"/>');
+    out.push('<path d="M' + xa.toFixed(1) + ' ' + t.toFixed(1) + ' L' + xa.toFixed(1) + ' ' + (bo + sh).toFixed(1) +
+      '" stroke="#b0505a" stroke-width="1.1" opacity=".3" stroke-linecap="round"/>');
+    return out.join('');
+  }
+
+  /* the samgyeopsal face, painted inside one piece's clip */
+  function meatArt(spec, a, b, cutL, cutR) {
+    var out = [], i, k, x, f, span = b - a, t, bo, hh, marks, n, bi;
+    out.push('<path d="' + slabPath(spec, a, b) + '" fill="url(#meatG)"/>');
+    /* the fat layers; the rind is laid on last so it stays a clean band */
+    for (i = 1; i < BANDS.length; i++) {
+      out.push('<path d="' + bandAt(spec, a, b, BANDS[i].i0, BANDS[i].i1) + '" fill="' + BANDS[i].fill + '"/>');
+    }
+    /* one faint grain line inside each fat layer */
+    for (i = 1; i < BANDS.length; i++) {
+      f = BOUNDS[BANDS[i].i0].f + (BOUNDS[BANDS[i].i1].f - BOUNDS[BANDS[i].i0].f) * 0.55;
+      out.push('<path d="' + ptsPath(depthPts(spec, a, b, f, wob(0.010, 24 + 5 * i, 1.2 * i + 0.7), 26)) +
+        '" fill="none" stroke="#e9c9a0" stroke-width="1.2" opacity=".3" stroke-linecap="round"/>');
+    }
+    /* soft shadow and a wet edge where fat meets lean */
+    for (i = 1; i < BOUNDS.length - 1; i++) {
+      out.push('<path d="' + ptsPath(depthPts(spec, a, b, BOUNDS[i].f - 0.016, BOUNDS[i].w, 28)) +
+        '" fill="none" stroke="#c98255" stroke-width="2.2" opacity=".15" stroke-linecap="round"/>');
+      out.push('<path d="' + ptsPath(depthPts(spec, a, b, BOUNDS[i].f + 0.013, BOUNDS[i].w, 28)) +
+        '" fill="none" stroke="#fffdf4" stroke-width="1.4" opacity=".28" stroke-linecap="round"/>');
+    }
+    /* the round belly of each lean band: light above, shade below */
+    for (k = 0; k < LEANB.length; k++) {
+      out.push('<path d="' + bandPath(spec, a, b, BOUNDS[LEANB[k][0]].f, BOUNDS[LEANB[k][0]].f + 0.030,
+        BOUNDS[LEANB[k][0]].w, null) + '" fill="#ff9d92" opacity=".10"/>');
+      out.push('<path d="' + bandPath(spec, a, b, BOUNDS[LEANB[k][1]].f - 0.034, BOUNDS[LEANB[k][1]].f,
+        BOUNDS[LEANB[k][1]].w, null) + '" fill="#6d1a22" opacity=".16"/>');
+    }
+    /* marbling: thin cream veins and short flecks inside the lean */
+    for (k = 0; k < LEANB.length; k++) {
+      for (i = 0; i < 3; i++) {
+        f = BOUNDS[LEANB[k][0]].f + (BOUNDS[LEANB[k][1]].f - BOUNDS[LEANB[k][0]].f) * (0.24 + 0.26 * i);
+        out.push('<path d="' + ptsPath(depthPts(spec, a, b, f, wob(0.016, 28 + 7 * i, 0.9 * i + 0.6 * k, 0.007, 52, 1.7 * k), 26)) +
+          '" fill="none" stroke="#ffd9c0" stroke-width="' + (i === 1 ? 0.8 : 1.0) + '" opacity="' +
+          (i === 1 ? 0.22 : 0.32) + '" stroke-linecap="round"/>');
       }
-      out.push('<path d="' + line + '" fill="none" stroke="#ffe6cd" stroke-width="2" opacity="' + (0.34 - k * 0.05).toFixed(2) + '" stroke-linecap="round"/>');
+      /* muscle fibres: short dark strokes */
+      n = Math.max(2, Math.round(span * 6));
+      for (i = 0; i < n; i++) {
+        x = a + span * ((i + 0.4) / n) + (i % 2 ? 0.012 : -0.006);
+        f = BOUNDS[LEANB[k][0]].f + (BOUNDS[LEANB[k][1]].f - BOUNDS[LEANB[k][0]].f) * (0.5 + ((i * 7) % 3) * 0.14);
+        out.push('<path d="M' + mx(x).toFixed(1) + ' ' + depthY(spec, x, f).toFixed(1) + ' l' +
+          (3.2 + (i % 3) * 1.8).toFixed(1) + ' ' + ((i % 2) ? 1.2 : -1.2).toFixed(1) +
+          '" stroke="#8b2430" stroke-width="1" opacity=".16" stroke-linecap="round"/>');
+      }
     }
-    out.push('<path d="' + edgeLine(spec, a, b, -1, -1.6) + '" fill="none" stroke="#e7ab7a" stroke-width="3.4" opacity=".95" stroke-linecap="round"/>');
-    out.push('<path d="' + edgeLine(spec, a, b, -1, 4.2) + '" fill="none" stroke="#ffeacd" stroke-width="4" opacity=".6" stroke-linecap="round"/>');
-    out.push('<path d="' + edgeLine(spec, a, b, 1, 1.6) + '" fill="none" stroke="#e7ab7a" stroke-width="3.4" opacity=".95" stroke-linecap="round"/>');
-    var marks = Math.max(2, Math.round(span * 9));
+    /* fat specks */
+    marks = Math.max(5, Math.round(span * 10));
+    for (i = 0; i < marks; i++) {
+      k = i % LEANB.length;
+      f = BOUNDS[LEANB[k][0]].f + (BOUNDS[LEANB[k][1]].f - BOUNDS[LEANB[k][0]].f) * (0.2 + ((i * 29) % 7) / 8.5);
+      x = a + span * ((i + 0.5) / marks);
+      out.push('<ellipse cx="' + mx(x).toFixed(1) + '" cy="' + depthY(spec, x, f).toFixed(1) + '" rx="' +
+        (0.8 + ((i * 13) % 3) * 0.4).toFixed(1) + '" ry="0.7" fill="#fff8ee" opacity="' +
+        (0.24 + ((i * 7) % 4) * 0.05).toFixed(2) + '"/>');
+    }
+    /* wet specular streaks and a sheen along the top of the lean */
+    out.push('<path d="' + ptsPath(depthPts(spec, a, b, 0.135, wob(0.006, 21, 0.4), 24)) +
+      '" fill="none" stroke="#ffffff" stroke-width="2.4" opacity=".3" stroke-linecap="round"/>');
+    out.push('<path d="' + ptsPath(depthPts(spec, a, b, 0.205, wob(0.005, 26, 2.1), 24)) +
+      '" fill="none" stroke="#fffdf7" stroke-width="1.6" opacity=".22" stroke-linecap="round"/>');
+    out.push('<path d="' + ptsPath(depthPts(spec, a, b, BOUNDS[2].f + 0.016, BOUNDS[2].w, 24)) +
+      '" fill="none" stroke="#ff9c8e" stroke-width="1.4" opacity=".16" stroke-linecap="round"/>');
+    /* knife marks scored into the lean */
+    marks = Math.max(1, Math.min(4, Math.round(span * 6)));
+    for (i = 0; i < marks; i++) {
+      x = a + span * ((i + 0.55) / marks);
+      t = topY(spec, x); bo = botY(spec, x); hh = bo - t;
+      out.push('<path d="M' + mx(x).toFixed(1) + ' ' + (t + hh * 0.335).toFixed(1) + ' L' +
+        (mx(x) + (i % 2 ? 3 : -3)).toFixed(1) + ' ' + (t + hh * 0.470).toFixed(1) +
+        '" stroke="#a52f3c" stroke-width="1.2" opacity=".18" stroke-linecap="round"/>');
+      out.push('<path d="M' + (mx(x) + 1).toFixed(1) + ' ' + (t + hh * 0.343).toFixed(1) + ' L' +
+        (mx(x) + (i % 2 ? 3.9 : -2.1)).toFixed(1) + ' ' + (t + hh * 0.464).toFixed(1) +
+        '" stroke="#fff4e4" stroke-width="1.1" opacity=".36" stroke-linecap="round"/>');
+    }
+    /* thickness shading: the slab darkens toward its lower edge */
+    out.push('<path d="' + slabPath(spec, a, b) + '" fill="url(#bulkG)"/>');
+    /* the rind, laid on last so it stays a clean band */
+    out.push('<path d="' + bandAt(spec, a, b, 0, 1) + '" fill="url(#rindG)"/>');
+    out.push('<path d="' + ptsPath(depthPts(spec, a, b, BOUNDS[1].f, BOUNDS[1].w, 28)) +
+      '" fill="none" stroke="#fdf0d9" stroke-width="1.6" opacity=".45" stroke-linecap="round"/>');
+    out.push('<path d="' + ptsPath(depthPts(spec, a, b, 0, null, 30)) +
+      '" fill="none" stroke="#6d3f16" stroke-width="2.4" opacity=".5" stroke-linecap="round"/>');
+    if (cutL) { out.push(cutFace(spec, a, -1, 3.2)); }
+    if (cutR) { out.push(cutFace(spec, b, 1, 3.2)); }
+    return out.join('');
+  }
+
+  /* the near side of the block, so the slab reads as a thick piece of meat */
+  function sideArt(spec, a, b) {
+    var out = [], i, x, span = b - a, bo, sh, marks = Math.max(3, Math.round(span * 12));
+    out.push('<path d="' + sidePath(spec, a, b) + '" fill="url(#sideG)"/>');
     for (i = 1; i < marks; i++) {
-      x = a + span * (i / marks) + 0.004;
-      t = MEAT_CY - halfH(spec, x);
-      out.push('<path d="M' + mx(x).toFixed(1) + ' ' + (t + 6).toFixed(1) + ' l3.6 7" stroke="#c8425a" stroke-width="1.5" opacity=".38" stroke-linecap="round"/>');
+      x = a + span * (i / marks);
+      bo = botY(spec, x); sh = sideH(spec, x);
+      out.push('<path d="M' + mx(x).toFixed(1) + ' ' + (bo + 1.6).toFixed(1) + ' L' + (mx(x) + 1.8).toFixed(1) + ' ' +
+        (bo + sh - 1.4).toFixed(1) + '" stroke="#6f4526" stroke-width="1" opacity=".13" stroke-linecap="round"/>');
     }
+    out.push('<path d="' + ptsPath(depthPts(spec, a, b, 1, null, 30)) +
+      '" fill="none" stroke="#e8b983" stroke-width="1.4" opacity=".5" stroke-linecap="round"/>');
+    out.push('<path d="' + sidePath(spec, a, b) + '" fill="none" stroke="#6b4423" stroke-width="1" opacity=".28"/>');
     return out.join('');
   }
 
@@ -754,7 +937,15 @@ button{font-family:inherit;cursor:pointer}
     out.push('<svg viewBox="0 0 ' + VB_W + ' ' + VB_H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="통삼겹살 도마 위 고기">');
     out.push('<defs>');
     out.push('<linearGradient id="woodG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e5aa6d"/><stop offset="0.45" stop-color="#cf8c50"/><stop offset="1" stop-color="#b4733c"/></linearGradient>');
-    out.push('<linearGradient id="meatG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffa3aa"/><stop offset="0.3" stop-color="#f4737f"/><stop offset="0.72" stop-color="#e75d6f"/><stop offset="1" stop-color="#d94f63"/></linearGradient>');
+    out.push('<linearGradient id="meatG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d5585b"/><stop offset="0.22" stop-color="#c8464c"/><stop offset="0.6" stop-color="#bd3d45"/><stop offset="0.86" stop-color="#b2343c"/><stop offset="1" stop-color="#9f2b34"/></linearGradient>');
+    out.push('<linearGradient id="rindG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dca65e"/><stop offset="0.5" stop-color="#c0873e"/><stop offset="1" stop-color="#a16d2c"/></linearGradient>');
+    out.push('<linearGradient id="fatG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdf3e0"/><stop offset="0.4" stop-color="#f9e7c8"/><stop offset="0.8" stop-color="#f2d8b2"/><stop offset="1" stop-color="#e9c99e"/></linearGradient>');
+    out.push('<linearGradient id="fatBandG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fcf0da"/><stop offset="0.45" stop-color="#f4dfbd"/><stop offset="1" stop-color="#e5c69c"/></linearGradient>');
+    out.push('<linearGradient id="fatEdgeG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6ddbd"/><stop offset="0.6" stop-color="#e9c79b"/><stop offset="1" stop-color="#d9ae7e"/></linearGradient>');
+    out.push('<linearGradient id="cutG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#f6d6c4"/><stop offset="1" stop-color="#e7b7a2"/></linearGradient>');
+    out.push('<linearGradient id="bulkG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5f1620" stop-opacity="0"/><stop offset="0.62" stop-color="#5f1620" stop-opacity=".04"/><stop offset="1" stop-color="#5f1620" stop-opacity=".34"/></linearGradient>');
+    out.push('<linearGradient id="sideG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a8632f"/><stop offset="0.45" stop-color="#8a4c22"/><stop offset="1" stop-color="#5f3316"/></linearGradient>');
+    out.push('<filter id="soft" x="-25%" y="-90%" width="150%" height="280%"><feGaussianBlur stdDeviation="3.4"/></filter>');
     out.push('<radialGradient id="glowG" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff3dd" stop-opacity=".95"/><stop offset="1" stop-color="#fff3dd" stop-opacity="0"/></radialGradient>');
     out.push('</defs>');
     out.push('<ellipse cx="180" cy="106" rx="172" ry="72" fill="url(#glowG)"/>');
@@ -769,10 +960,11 @@ button{font-family:inherit;cursor:pointer}
       d = slabPath(spec, a, b);
       clip = 'clipP' + i;
       out.push('<g class="piece" style="animation:popIn .26s ease-out both" transform="translate(' + (split ? ((i - (n - 1) / 2) * 6).toFixed(1) : '0') + ',0)">');
+      out.push('<path d="' + sidePath(spec, a, b) + '" fill="#5c3413" opacity=".28" transform="translate(0,4)" filter="url(#soft)"/>');
+      out.push(sideArt(spec, a, b));
       out.push('<clipPath id="' + clip + '"><path d="' + d + '"/></clipPath>');
-      out.push('<path d="' + d + '" fill="url(#meatG)"/>');
-      out.push('<g clip-path="url(#' + clip + ')">' + surfaceDetail(spec, a, b) + '</g>');
-      out.push('<path d="' + d + '" fill="none" stroke="#b8455a" stroke-width="1.5" opacity=".6"/>');
+      out.push('<g clip-path="url(#' + clip + ')">' + meatArt(spec, a, b, split && a > 0, split && b < 1) + '</g>');
+      out.push('<path d="' + d + '" fill="none" stroke="#8e3138" stroke-width="1.1" opacity=".45"/>');
       out.push('</g>');
     }
 
